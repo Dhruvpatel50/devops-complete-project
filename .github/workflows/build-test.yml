@@ -1,0 +1,35 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install Dependencies
+      working-directory: ./services/${{ matrix.service }}
+      run: npm ci
+
+    - name: Run Tests
+      working-directory: ./services/${{ matrix.service }}
+      run: npm test || true # Add proper test command when tests are implemented
+
+    - name: Build Service
+      working-directory: ./services/${{ matrix.service }}
+      run: npm run build || true # Add build command if needed
