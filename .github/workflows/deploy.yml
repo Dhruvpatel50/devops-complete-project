@@ -15,6 +15,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    env:
+      OWNER: ${{ toLower(github.repository_owner) }}
 
     steps:
     - uses: actions/checkout@v3
@@ -47,9 +49,9 @@ jobs:
       env:
         KUBECONFIG: ./kubeconfig
       run: |
-        # Update image tags in k8s manifests
+        # Update image tags in k8s manifests (ensure lowercase owner)
         for service in auth-service user-service swap-service messaging-service feedback-service; do
-          sed -i "s|image: .*${service}:.*|image: ghcr.io/${{ github.repository_owner }}/skillswapper-${service}:${{ github.sha }}|g" k8s/${service}-deployment.yaml
+          sed -i "s|image: .*${service}:.*|image: ghcr.io/${OWNER}/skillswapper-${service}:${{ github.sha }}|g" k8s/${service}-deployment.yaml
           kubectl apply -f k8s/${service}-deployment.yaml
         done
         kubectl apply -f k8s/ingress.yaml

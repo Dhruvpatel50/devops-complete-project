@@ -18,6 +18,8 @@ jobs:
       matrix:
         service: [auth-service, user-service, swap-service, messaging-service, feedback-service]
 
+    env:
+      OWNER: ${{ toLower(github.repository_owner) }}
     steps:
     - uses: actions/checkout@v3
 
@@ -28,7 +30,7 @@ jobs:
       uses: docker/login-action@v2
       with:
         registry: ghcr.io
-        username: ${{ github.repository_owner }}
+        username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and push
@@ -37,7 +39,7 @@ jobs:
         context: ./services/${{ matrix.service }}
         push: true
         tags: |
-          ghcr.io/${{ github.repository_owner }}/skillswapper-${{ matrix.service }}:${{ github.sha }}
-          ghcr.io/${{ github.repository_owner }}/skillswapper-${{ matrix.service }}:latest
+          ghcr.io/${{ env.OWNER }}/skillswapper-${{ matrix.service }}:${{ github.sha }}
+          ghcr.io/${{ env.OWNER }}/skillswapper-${{ matrix.service }}:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max

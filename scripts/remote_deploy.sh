@@ -3,13 +3,15 @@ set -euo pipefail
 
 SHA="$1"
 OWNER="$2"
+# normalize owner to lowercase for GHCR image names
+OWNER_LOWER=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
 
 services=(auth-service user-service swap-service messaging-service feedback-service)
 
 echo "Deploying images with SHA=$SHA and OWNER=$OWNER"
 
 for s in "${services[@]}"; do
-  IMAGE=ghcr.io/${OWNER}/${s}:${SHA}
+  IMAGE=ghcr.io/${OWNER_LOWER}/${s}:${SHA}
   echo "Updating deployment ${s} -> ${IMAGE}"
   # Try to set image; if deployment doesn't exist, warn
   if kubectl -n default get deployment ${s} >/dev/null 2>&1; then

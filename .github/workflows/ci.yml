@@ -28,14 +28,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set owner env
+        run: echo "OWNER=${{ toLower(github.repository_owner) }}" >> $GITHUB_ENV
+
       - name: Build and push image
         uses: docker/build-push-action@v4
         with:
           context: ./services/${{ matrix.service }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:latest
+            ghcr.io/${{ env.OWNER }}/${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/${{ env.OWNER }}/${{ matrix.service }}:latest
 
       - name: Output pushed image
-        run: echo "pushed ghcr.io/${{ github.repository_owner }}/${{ matrix.service }}:${{ github.sha }}"
+        run: echo "pushed ghcr.io/${{ env.OWNER }}/${{ matrix.service }}:${{ github.sha }}"
