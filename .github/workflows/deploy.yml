@@ -15,11 +15,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    env:
-      OWNER: ${{ toLower(github.repository_owner) }}
-
     steps:
     - uses: actions/checkout@v3
+
+    - name: Set OWNER (lowercase)
+      run: |
+        echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+    - name: Print OWNER (debug)
+      run: echo "OWNER=${{ env.OWNER }}"
+
 
     - name: Install kubectl
       uses: azure/setup-kubectl@v3
