@@ -34,7 +34,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set owner env
-        run: echo "OWNER=${{ github.repository_owner.toLowerCase() }}" >> $GITHUB_ENV
+        run: echo "OWNER=${{ toLower(github.repository_owner) }}" >> $GITHUB_ENV
 
       - name: Build and push image
         uses: docker/build-push-action@v4

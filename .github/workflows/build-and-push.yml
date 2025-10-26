@@ -19,7 +19,7 @@ jobs:
         service: [auth-service, user-service, swap-service, messaging-service, feedback-service]
 
     env:
-      OWNER: ${{ github.repository_owner.toLowerCase() }}
+      OWNER: ${{ toLower(github.repository_owner) }}
     steps:
     - uses: actions/checkout@v3
 
