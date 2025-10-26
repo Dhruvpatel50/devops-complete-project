@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: swap-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: swap-service
+  template:
+    metadata:
+      labels:
+        app: swap-service
+    spec:
+      containers:
+      - name: swap-service
+        image: <AWS_ECR_URI>/swap-service:latest
+        ports:
+        - containerPort: 3003
+        env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: swap-service-secrets
+              key: mongodb-uri
+        - name: AUTH_SERVICE_URL
+          value: "http://auth-service:3001"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: swap-service
+spec:
+  selector:
+    app: swap-service
+  ports:
+    - protocol: TCP
+      port: 3003
+      targetPort: 3003
+  type: ClusterIP

@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skillswapper-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /api/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /api/users
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 3002
+      - path: /api/swaps
+        pathType: Prefix
+        backend:
+          service:
+            name: swap-service
+            port:
+              number: 3003
+      - path: /api/messages
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 3004
+      - path: /api/feedback
+        pathType: Prefix
+        backend:
+          service:
+            name: feedback-service
+            port:
+              number: 3005

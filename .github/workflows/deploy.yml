@@ -1,0 +1,55 @@
+name: Deploy to k3s
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Images"]
+    types:
+      - completed
+    branches: [ main ]
+
+env:
+  MONGODB_URI: ${{ secrets.MONGODB_URI }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.AWS_EC2_IP }} >> ~/.ssh/known_hosts
+
+    - name: Get kubeconfig from k3s
+      run: |
+        ssh ubuntu@${{ secrets.AWS_EC2_IP }} 'sudo cat /etc/rancher/k3s/k3s.yaml' > kubeconfig
+        sed -i "s/127.0.0.1/${{ secrets.AWS_EC2_IP }}/g" kubeconfig
+
+    - name: Create Kubernetes secrets
+      env:
+        KUBECONFIG: ./kubeconfig
+      run: |
+        kubectl create secret generic app-secrets \
+          --from-literal=mongodb-uri=${{ secrets.MONGODB_URI }} \
+          --from-literal=jwt-secret=${{ secrets.JWT_SECRET }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy to k3s
+      env:
+        KUBECONFIG: ./kubeconfig
+      run: |
+        # Update image tags in k8s manifests
+        for service in auth-service user-service swap-service messaging-service feedback-service; do
+          sed -i "s|image: .*${service}:.*|image: ghcr.io/${{ github.repository_owner }}/skillswapper-${service}:${{ github.sha }}|g" k8s/${service}-deployment.yaml
+          kubectl apply -f k8s/${service}-deployment.yaml
+        done
+        kubectl apply -f k8s/ingress.yaml

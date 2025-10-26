@@ -1,0 +1,61 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/auth
+      - JWT_SECRET=devsecret
+    depends_on:
+      - mongodb
+  user-service:
+    build: ./services/user-service
+    ports:
+      - "3002:3002"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/user
+      - AUTH_SERVICE_URL=http://auth-service:3001
+    depends_on:
+      - mongodb
+      - auth-service
+  swap-service:
+    build: ./services/swap-service
+    ports:
+      - "3003:3003"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/swap
+      - AUTH_SERVICE_URL=http://auth-service:3001
+    depends_on:
+      - mongodb
+      - auth-service
+  messaging-service:
+    build: ./services/messaging-service
+    ports:
+      - "3004:3004"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/messaging
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - CLIENT_URL=http://localhost:3000
+    depends_on:
+      - mongodb
+      - auth-service
+  feedback-service:
+    build: ./services/feedback-service
+    ports:
+      - "3005:3005"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/feedback
+      - AUTH_SERVICE_URL=http://auth-service:3001
+    depends_on:
+      - mongodb
+      - auth-service
+volumes:
+  mongo_data:
