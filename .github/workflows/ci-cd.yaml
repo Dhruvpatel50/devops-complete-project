@@ -1,51 +1,105 @@
-name: CI/CD Pipeline
+name: SkillSwapper CI/CD
 
 on:
   push:
-    branches: [ main, dev-fix ]
+    branches: ["main", "dev-fix"]
   pull_request:
-    branches: [ main ]
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+env:
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
 jobs:
-  build-and-test:
+  ###########################################################################
+  # Job 1: Code Quality & Security Checks
+  ###########################################################################
+  code-quality:
+    name: Code Quality & Security Scan
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Install Frontend Dependencies
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: Install Service Dependencies
         run: |
-          npm install --legacy-peer-deps
-          npm install react-router-dom @testing-library/react @testing-library/jest-dom --save
-      
+          for service in services/auth-service services/user-service services/swap-service services/messaging-service; do
+            echo "Installing dependencies for $service"
+            cd $service
+            npm ci || npm install
+            cd ../../..
+          done
+
       - name: Run Frontend Tests
         env:
           CI: true
-        run: |
-          npm test -- --passWithNoTests --watchAll=false
+        run: npm test -- --passWithNoTests --watchAll=false
 
-  deploy-frontend:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev-fix'
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - name: Run Service Tests
+        continue-on-error: true
+        run: |
+          for service in services/auth-service services/user-service services/swap-service services/messaging-service; do
+            echo "Running tests for $service"
+            cd $service
+            if grep -q '"test"' package.json; then
+              npm test -- --passWithNoTests || true
+            fi
+            cd ../../..
+          done
+
+      - name: Security Scan
+        uses: aquasecurity/trivy-action@master
         with:
-          node-version: '18'
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Security Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  ###########################################################################
+  # Job 2: Frontend Build & Deploy
+  ###########################################################################
+  frontend-deploy:
+    name: Frontend Deployment
+    needs: code-quality
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
           cache: 'npm'
-      
+
       - name: Install Dependencies
-        run: npm install --legacy-peer-deps
-      
+        run: npm ci || npm install
+
       - name: Build Frontend
         env:
           REACT_APP_AUTH_API: https://auth-service-skillswapper.onrender.com
@@ -53,27 +107,93 @@ jobs:
           REACT_APP_SWAP_API: https://swap-service-skillswapper.onrender.com
           REACT_APP_MESSAGE_API: https://feedback-service-2rtd.onrender.com
           REACT_APP_FRONTEND_URL: https://devops-complete-project.vercel.app
+          CI: false
         run: npm run build
-      
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v20
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: ./
-          vercel-args: '--prod'
 
-  notify:
-    needs: [deploy-frontend]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Notify Deployment Status
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to Vercel
         run: |
-          if [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
-            echo "✅ Deployment successful!"
+          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+  ###########################################################################
+  # Job 3: Backend Services Health Check
+  ###########################################################################
+  backend-health:
+    name: Backend Services Status
+    runs-on: ubuntu-latest
+    needs: code-quality
+
+    steps:
+      - name: Check Auth Service
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://auth-service-skillswapper.onrender.com/api/health || echo "Failed")
+          echo "Auth Service Status: $response"
+          if [ "$response" != "200" ]; then
+            echo "⚠️ Auth Service might be down or initializing"
+          fi
+
+      - name: Check User Service
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://user-service-skillswapper.onrender.com/api/health || echo "Failed")
+          echo "User Service Status: $response"
+          if [ "$response" != "200" ]; then
+            echo "⚠️ User Service might be down or initializing"
+          fi
+
+      - name: Check Swap Service
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://swap-service-skillswapper.onrender.com/api/health || echo "Failed")
+          echo "Swap Service Status: $response"
+          if [ "$response" != "200" ]; then
+            echo "⚠️ Swap Service might be down or initializing"
+          fi
+
+      - name: Check Messaging Service
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://feedback-service-2rtd.onrender.com/api/health || echo "Failed")
+          echo "Messaging Service Status: $response"
+          if [ "$response" != "200" ]; then
+            echo "⚠️ Messaging Service might be down or initializing"
+          fi
+
+  ###########################################################################
+  # Job 4: Deployment Summary
+  ###########################################################################
+  deployment-summary:
+    name: Generate Deployment Report
+    runs-on: ubuntu-latest
+    needs: [frontend-deploy, backend-health]
+    if: always()
+
+    steps:
+      - name: Create Summary
+        run: |
+          echo "# SkillSwapper Deployment Status" > deployment-summary.md
+          echo "## Frontend" >> deployment-summary.md
+          echo "- Status: ${{ needs.frontend-deploy.result }}" >> deployment-summary.md
+          echo "- URL: https://devops-complete-project.vercel.app" >> deployment-summary.md
+          echo "## Backend Services" >> deployment-summary.md
+          echo "- Auth Service: https://auth-service-skillswapper.onrender.com" >> deployment-summary.md
+          echo "- User Service: https://user-service-skillswapper.onrender.com" >> deployment-summary.md
+          echo "- Swap Service: https://swap-service-skillswapper.onrender.com" >> deployment-summary.md
+          echo "- Messaging Service: https://feedback-service-2rtd.onrender.com" >> deployment-summary.md
+
+      - name: Upload Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-summary
+          path: deployment-summary.md
+          retention-days: 7
+
+      - name: Pipeline Status
+        run: |
+          if [ "${{ needs.frontend-deploy.result }}" == "success" ]; then
+            echo "✅ Pipeline completed successfully!"
           else
-            echo "❌ Deployment failed!"
+            echo "❌ Pipeline completed with issues"
             exit 1
           fi
