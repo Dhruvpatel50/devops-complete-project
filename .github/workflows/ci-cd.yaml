@@ -26,12 +26,13 @@ jobs:
       
       - name: Install Dependencies
         run: |
-          npm install
-          cd services/auth-service && npm install
-          cd ../feedback-service && npm install
-          cd ../messaging-service && npm install
-          cd ../swap-service && npm install
-          cd ../user-service && npm install
+          npm install --legacy-peer-deps
+          npm install react-router-dom --save
+          cd services/auth-service && npm install --legacy-peer-deps
+          cd ../feedback-service && npm install --legacy-peer-deps
+          cd ../messaging-service && npm install --legacy-peer-deps
+          cd ../swap-service && npm install --legacy-peer-deps
+          cd ../user-service && npm install --legacy-peer-deps
       
       - name: Run Tests
         run: |
