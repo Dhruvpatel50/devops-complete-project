@@ -4,7 +4,7 @@ import NavBar from './components/NavBar';
 import './App.css';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-
+//added comment
 // Lazy load components
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const Login = lazy(() => import('./components/Login'));
