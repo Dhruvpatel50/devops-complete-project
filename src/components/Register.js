@@ -261,7 +261,7 @@ const Register = () => {
         formDataToSend.append('profilePhoto', formData.profileFile);
       }
       
-      const response = await fetch('http://localhost:3001/api/auth/register', {
+      const response = await fetch('https://auth-service-skillswapper.onrender.com/api/auth/register', {
         method: 'POST',
         body: formDataToSend
       });

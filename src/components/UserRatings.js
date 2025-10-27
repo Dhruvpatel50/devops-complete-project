@@ -18,7 +18,7 @@ const UserRatings = ({ userId }) => {
   const fetchRatings = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/feedback/user/${userId}?page=${currentPage}&limit=5`);
+      const res = await fetch(`https://feedback-service-2rtd.onrender.com/api/feedback/user/${userId}?page=${currentPage}&limit=5`);
       const data = await res.json();
       
       if (res.ok && data.success) {

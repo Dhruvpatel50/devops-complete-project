@@ -21,7 +21,7 @@ const FeedbackForm = ({ userId, swapOfferId, fromUserId, onClose, onSuccess }) =
     setIsSubmitting(true);
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('http://localhost:5000/api/feedback', {
+      const res = await fetch('https://feedback-service-2rtd.onrender.com/api/feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

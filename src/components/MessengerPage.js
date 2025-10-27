@@ -74,7 +74,7 @@ const MessengerPage = () => {
     if (!myId) return;
 
     console.log('Initializing socket connection');
-    socketRef.current = io('http://localhost:5000', {
+    socketRef.current = io('https://feedback-service-2rtd.onrender.com', {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 5,
@@ -166,7 +166,7 @@ const MessengerPage = () => {
       if (!myId) return;
       const token = localStorage.getItem('token');
       try {
-        const res = await fetch(`http://localhost:5000/api/chat-contacts/contacts/${myId}`, {
+        const res = await fetch(`https://feedback-service-2rtd.onrender.com/api/chat-contacts/contacts/${myId}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         const data = await res.json();
@@ -184,7 +184,7 @@ const MessengerPage = () => {
 
     const fetchLastMessage = async (userId) => {
       try {
-        const res = await fetch(`http://localhost:5000/api/messages/${myId}/${userId}?limit=1`);
+        const res = await fetch(`https://messaging-service-skillswapper.onrender.com/api/messages/${myId}/${userId}?limit=1`);
         const data = await res.json();
         if (data.success && data.messages.length > 0) {
           setLastMessages(prev => ({
@@ -236,7 +236,7 @@ const MessengerPage = () => {
 
     const fetchMessages = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/messages/${myId}/${activeUser._id}`);
+        const res = await fetch(`https://feedback-service-2rtd.onrender.com/api/messages/${myId}/${activeUser._id}`);
         const data = await res.json();
         if (data.success) {
           console.log('Fetched messages:', data.messages.length);

@@ -86,7 +86,7 @@ const UserProfile = () => {
     const fetchProfile = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:5000/api/auth/user/${id}`);
+        const res = await fetch(`https://auth-service-skillswapper.onrender.com/api/auth/user/${id}`);
         const data = await res.json();
         if (res.ok && data.success) {
           setProfile(data.user || data);
@@ -203,7 +203,7 @@ const UserProfile = () => {
     const userId = localStorage.getItem('userId');
     const token = localStorage.getItem('token');
     try {
-      const res = await fetch('http://localhost:5000/api/swap-offers', {
+      const res = await fetch('https://swap-service-skillswapper.onrender.com/api/swap-offers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

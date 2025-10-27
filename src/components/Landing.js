@@ -348,7 +348,7 @@ const SkillXchangeLanding = () => {
       setUsers([]);
 
       try {
-        const res = await fetch("http://localhost:5000/api/auth/users");
+        const res = await fetch("https://auth-service-skillswapper.onrender.com/api/auth/users");
 
         if (!res.ok) {
           console.error("Failed to fetch from API:", res.status, res.statusText);

@@ -102,7 +102,7 @@ const AllUsers = () => {
          } else {
            console.log('Fetching users from API...');
            const token = localStorage.getItem('token');
-           const res = await fetch('http://localhost:5000/api/auth/users', {
+           const res = await fetch('https://auth-service-skillswapper.onrender.com/api/auth/users', {
              headers: token ? { Authorization: `Bearer ${token}` } : {}
            });
            const data = await res.json();

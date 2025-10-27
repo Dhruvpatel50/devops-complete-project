@@ -86,7 +86,7 @@ const Dashboard = () => {
       try {
         // Current user
         const cachedUser = getCache('dashboard:user');
-        const userResp = cachedUser || await fetchJson(`http://localhost:5000/api/auth/user/${userId}`);
+        const userResp = cachedUser || await fetchJson(`https://auth-service-skillswapper.onrender.com/api/auth/user/${userId}`);
         const currentUser = (userResp.user || userResp);
         setUser(currentUser);
         setCache('dashboard:user', currentUser);

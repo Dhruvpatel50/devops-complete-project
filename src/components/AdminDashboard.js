@@ -24,7 +24,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/auth/users');
+        const res = await fetch('https://auth-service-skillswapper.onrender.com/api/auth/users');
         const data = await res.json();
         if (res.ok && data.success && Array.isArray(data.users)) {
           setUsers(data.users);

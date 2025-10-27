@@ -83,7 +83,7 @@ const SwapRequests = () => {
       if (status !== 'All') params.append('status', status);
       if (type !== 'All') params.append('type', type);
 
-      const res = await fetch(`http://localhost:5000/api/swap-offers/user/${user._id}?${params}`);
+      const res = await fetch(`https://swap-service-skillswapper.onrender.com/api/swap-offers/user/${user._id}?${params}`);
       const data = await res.json();
 
       if (res.ok && data.success) {
