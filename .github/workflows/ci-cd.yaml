@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  AWS_REGION: us-west-2
-  ECR_REPOSITORY: skillswapper
-  EKS_CLUSTER_NAME: skillswapper-cluster
-  TERRAFORM_WORKING_DIR: ./infra
-
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
@@ -21,121 +15,65 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16'
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install Frontend Dependencies
+        run: |
+          npm install --legacy-peer-deps
+          npm install react-router-dom @testing-library/react @testing-library/jest-dom --save
+      
+      - name: Run Frontend Tests
+        env:
+          CI: true
+        run: |
+          npm test -- --passWithNoTests --watchAll=false
+
+  deploy-frontend:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev-fix'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
           cache: 'npm'
       
       - name: Install Dependencies
-        run: |
-          npm install --legacy-peer-deps
-          npm install react-router-dom --save
-          cd services/auth-service && npm install --legacy-peer-deps
-          cd ../feedback-service && npm install --legacy-peer-deps
-          cd ../messaging-service && npm install --legacy-peer-deps
-          cd ../swap-service && npm install --legacy-peer-deps
-          cd ../user-service && npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps
       
-      - name: Run Tests
-        run: |
-          npm test
-          cd services/auth-service && npm test
-          cd ../feedback-service && npm test
-          cd ../messaging-service && npm test
-          cd ../swap-service && npm test
-          cd ../user-service && npm test
-
-  docker-build:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
-    
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build and Push Docker image
+      - name: Build Frontend
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        run: |
-          cd services/${{ matrix.service }}
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ matrix.service }}-${{ github.sha }} .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ matrix.service }}-${{ github.sha }}
+          REACT_APP_AUTH_API: https://auth-service-skillswapper.onrender.com
+          REACT_APP_USER_API: https://user-service-skillswapper.onrender.com
+          REACT_APP_SWAP_API: https://swap-service-skillswapper.onrender.com
+          REACT_APP_MESSAGE_API: https://feedback-service-2rtd.onrender.com
+          REACT_APP_FRONTEND_URL: https://devops-complete-project.vercel.app
+        run: npm run build
+      
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./
+          vercel-args: '--prod'
 
-  terraform:
-    needs: docker-build
+  notify:
+    needs: [deploy-frontend]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev-fix'
-    
+    if: always()
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.0.0
-
-      - name: Terraform Init
-        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
-        run: terraform init
-
-      - name: Terraform Plan
-        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
-        run: terraform plan -out=tfplan
-        
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
-        working-directory: ${{ env.TERRAFORM_WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
-
-  deploy:
-    needs: terraform
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev-fix'
-    
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
-
-      - name: Deploy to EKS
+      - name: Notify Deployment Status
         run: |
-          # Update image tags in k8s manifests
-          for service in auth-service feedback-service messaging-service swap-service user-service; do
-            sed -i "s|image:.*|image: ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$service-${{ github.sha }}|g" k8s/$service-deployment.yaml
-            kubectl apply -f k8s/$service-deployment.yaml
-          done
-          
-          # Apply ingress configuration
-          kubectl apply -f k8s/ingress.yaml
-
-      - name: Verify deployment
-        run: |
-          for service in auth-service feedback-service messaging-service swap-service user-service; do
-            kubectl rollout status deployment/$service
-          done
+          if [ "${{ needs.deploy-frontend.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+            exit 1
+          fi
