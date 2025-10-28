@@ -38,24 +38,20 @@ jobs:
       - name: Gitleaks Scanner
         uses: zricethezav/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           config-path: .gitleaks.toml
           report-format: sarif
           report-path: results/gitleaks.sarif
-          verbose: true
         continue-on-error: true
 
-      - name: List results directory
+      - name: List results directory (Debug)
         if: always()
-        run: |
-          echo "Contents of results directory:"
-          ls -la results/
+        run: ls -la results/
 
       - name: Upload Gitleaks Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('results/gitleaks.sarif') != ''
         with:
           sarif_file: results/gitleaks.sarif
           category: gitleaks
@@ -85,21 +81,16 @@ jobs:
         run: |
           if [ -f package.json ]; then
             if [ -f package-lock.json ]; then
-              echo "package-lock.json found — using npm ci"
               npm ci --silent
             else
-              echo "package-lock.json not found — using npm install"
               npm install --silent
             fi
-          else
-            echo "No package.json — skipping install"
           fi
 
       - name: Run NPM Audit
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
-            echo "Running npm audit..."
             npm audit --audit-level=high --json > npm-audit.json || true
           fi
 
@@ -107,15 +98,13 @@ jobs:
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
-            echo "Installing ESLint..."
             npm install --save-dev eslint eslint-plugin-security
-            echo "Running ESLint..."
             npx eslint . --format=sarif --output-file=eslint.sarif || true
           fi
 
       - name: Upload ESLint Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('./services/${{ matrix.service }}/eslint.sarif') != ''
         with:
           sarif_file: ./services/${{ matrix.service }}/eslint.sarif
           category: eslint
@@ -131,7 +120,7 @@ jobs:
 
       - name: Upload Snyk Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('snyk.sarif') != ''
         with:
           sarif_file: snyk.sarif
           category: snyk
@@ -169,7 +158,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GH_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Build image for scanning
         uses: docker/build-push-action@v4
@@ -189,7 +178,7 @@ jobs:
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
           category: trivy
