@@ -15,7 +15,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ lower(github.repository_owner) }}
   IMAGE_TAG: ${{ github.sha }}
 
 concurrency:
@@ -30,6 +29,9 @@ jobs:
       matrix:
         service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
     steps:
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -69,6 +71,9 @@ jobs:
       matrix:
         service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
     steps:
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -150,6 +155,9 @@ jobs:
     environment:
       name: production
     steps:
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -171,7 +179,6 @@ jobs:
 
       - name: Update image tags and apply manifests
         env:
-          OWNER: ${{ env.OWNER }}
           TAG: ${{ env.IMAGE_TAG }}
           REGISTRY: ${{ env.REGISTRY }}
         run: |
