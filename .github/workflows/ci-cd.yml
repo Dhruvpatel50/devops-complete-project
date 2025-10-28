@@ -219,7 +219,9 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ github.token }}      - name: Build local image
+          password: ${{ github.token }}      
+      
+      - name: Build local image
         uses: docker/build-push-action@v4
         with:
           context: ./services/${{ matrix.service }}
