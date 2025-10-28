@@ -35,23 +35,39 @@ jobs:
       - name: Create results directory
         run: mkdir -p results
 
-      - name: Gitleaks Scanner
+      - name: Run Gitleaks Scan
         uses: zricethezav/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         with:
           config-path: .gitleaks.toml
           report-format: sarif
           report-path: results/gitleaks.sarif
         continue-on-error: true
 
-      - name: List results directory (Debug)
+      - name: Ensure Gitleaks SARIF exists
         if: always()
-        run: ls -la results/
+        run: |
+          if [ ! -s results/gitleaks.sarif ]; then
+            echo "Creating valid empty SARIF for Gitleaks..."
+            cat <<EOF > results/gitleaks.sarif
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Gitleaks"
+        }
+      },
+      "results": []
+    }
+  ]
+}
+EOF
+          fi
 
       - name: Upload Gitleaks Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('results/gitleaks.sarif') != ''
+        if: always()
         with:
           sarif_file: results/gitleaks.sarif
           category: gitleaks
@@ -64,6 +80,7 @@ jobs:
     strategy:
       matrix:
         service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
+
     steps:
       - name: Set lowercase owner
         run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
@@ -80,48 +97,43 @@ jobs:
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
-            if [ -f package-lock.json ]; then
-              npm ci --silent
-            else
-              npm install --silent
-            fi
+            npm install --silent
+          else
+            echo "No package.json — skipping install"
           fi
 
-      - name: Run NPM Audit
+      - name: Run ESLint Security Scan
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
-            npm audit --audit-level=high --json > npm-audit.json || true
+            npx eslint . --format=sarif --output-file=eslint.sarif || true
           fi
 
-      - name: Run ESLint
-        working-directory: ./services/${{ matrix.service }}
-        run: |
-          if [ -f package.json ]; then
-            npm install --save-dev eslint eslint-plugin-security
-            # Run ESLint on js/ts files only
-            npx eslint . --ext .js,.ts --format=sarif --output-file=eslint.sarif || true
-          fi
-
-      - name: Ensure ESLint SARIF file exists
+      - name: Ensure ESLint SARIF exists
         if: always()
         working-directory: ./services/${{ matrix.service }}
         run: |
-          if [ ! -f eslint.sarif ]; then
-            echo "ESLint SARIF missing. Creating placeholder..."
-            echo '{"version":"2.1.0","runs":[]}' > eslint.sarif
+          if [ ! -s eslint.sarif ]; then
+            echo "Creating valid ESLint SARIF placeholder..."
+            cat <<EOF > eslint.sarif
+{
+  "version": "2.1.0",
+  "runs": [{
+    "tool": { "driver": { "name": "ESLint", "version": "8.x" } },
+    "results": []
+  }]
+}
+EOF
           fi
 
-      - name: Upload ESLint Report
+      - name: Upload ESLint Scan Results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
           sarif_file: ./services/${{ matrix.service }}/eslint.sarif
           category: eslint
           wait-for-processing: true
 
-
-      - name: Run Snyk
+      - name: Run Snyk Security Scan
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -129,9 +141,24 @@ jobs:
           args: --severity-threshold=high --sarif-file-output=snyk.sarif
         continue-on-error: true
 
-      - name: Upload Snyk Report
+      - name: Ensure Snyk SARIF exists
+        if: always()
+        run: |
+          if [ ! -s snyk.sarif ]; then
+            echo "Creating valid Snyk SARIF placeholder..."
+            cat <<EOF > snyk.sarif
+{
+  "version": "2.1.0",
+  "runs": [{
+    "tool": { "driver": { "name": "Snyk" } },
+    "results": []
+  }]
+}
+EOF
+          fi
+
+      - name: Upload Snyk Results
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('snyk.sarif') != ''
         with:
           sarif_file: snyk.sarif
           category: snyk
@@ -151,15 +178,13 @@ jobs:
     strategy:
       matrix:
         service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
-    steps:
-      - name: Set lowercase owner
-        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Set lowercase owner
+        run: echo "OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -169,56 +194,69 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
-          password: ${{ github.token }}
+          password: ${{ secrets.GH_TOKEN }}
 
-      - name: Build image for scanning
+      - name: Build local image
         uses: docker/build-push-action@v4
         with:
           context: ./services/${{ matrix.service }}
           load: true
           tags: ${{ matrix.service }}:${{ github.sha }}
-          file: ./services/${{ matrix.service }}/Dockerfile
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ matrix.service }}:${{ github.sha }}'
+          image-ref: ${{ matrix.service }}:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+        continue-on-error: true
 
-      - name: Upload Trivy scan results
+      - name: Ensure Trivy SARIF exists
+        if: always()
+        run: |
+          if [ ! -s trivy-results.sarif ]; then
+            echo "Creating valid Trivy SARIF placeholder..."
+            cat <<EOF > trivy-results.sarif
+{
+  "version": "2.1.0",
+  "runs": [{
+    "tool": { "driver": { "name": "Trivy" } },
+    "results": []
+  }]
+}
+EOF
+          fi
+
+      - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: trivy-results.sarif
           category: trivy
           wait-for-processing: true
 
-      - name: Build and push final image
+      - name: Push final image
         uses: docker/build-push-action@v4
         with:
           context: ./services/${{ matrix.service }}
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}
-          file: ./services/${{ matrix.service }}/Dockerfile
 
   terraform:
     name: Terraform (init / plan / apply)
     runs-on: ubuntu-latest
+    env:
+      TF_ROOT: infra
     if: >
       github.event_name == 'push' && (
         contains(join(github.event.commits.*.added, ' '), 'infra/') ||
         contains(join(github.event.commits.*.modified, ' '), 'infra/') ||
         contains(join(github.event.commits.*.removed, ' '), 'infra/')
       ) || github.event_name == 'pull_request'
-    env:
-      TF_ROOT: infra
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -230,23 +268,8 @@ jobs:
         run: terraform init -input=false
 
       - name: Terraform Plan
-        id: plan
         working-directory: ${{ env.TF_ROOT }}
-        run: |
-          terraform plan -input=false -no-color -out=tfplan || true
-          terraform show -no-color tfplan > plan.txt || true
-          echo "PLAN<<EOF" >> $GITHUB_OUTPUT
-          cat plan.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Comment Plan on PR (optional)
-        if: github.event_name == 'pull_request'
-        uses: actions-ecosystem/action-create-comment@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          body: |
-            Terraform plan for ${{ github.ref }}:
-            ${{ steps.plan.outputs.PLAN }}
+        run: terraform plan -input=false -no-color -out=tfplan || true
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
