@@ -2,6 +2,75 @@
 
 A modern microservices-based skill exchange platform where users can connect, swap skills, and learn from each other.
 
+## DevSecOps Implementation
+
+Our project implements a comprehensive DevSecOps pipeline to ensure security, code quality, and reliability throughout the development lifecycle.
+
+### Security Scanning Tools
+
+1. **Gitleaks**
+   - Scans repository for hardcoded secrets and sensitive information
+   - Prevents accidental commit of credentials
+   - Generates SARIF reports for GitHub Security tab
+
+2. **Snyk**
+   - Continuous dependency vulnerability scanning
+   - Container image security scanning
+   - License compliance checking
+
+3. **Trivy**
+   - Container vulnerability scanning
+   - Identifies vulnerabilities in container images
+   - Checks for security issues in base images
+
+### Code Quality Tools
+
+1. **ESLint**
+   - Static code analysis
+   - Enforces code style and best practices
+   - Security-focused rules enabled
+
+2. **SonarCloud**
+   - Code quality metrics
+   - Security vulnerability detection
+   - Code coverage tracking
+
+### Dependency Management
+
+1. **NPM Audit**
+   - Continuous dependency scanning
+   - Automatic security updates
+   - Vulnerability reporting
+
+### Pipeline Stages
+
+1. **Security Scanning**
+   - Secret detection
+   - SAST (Static Application Security Testing)
+   - License compliance
+
+2. **Dependency Check**
+   - Vulnerability scanning
+   - Package auditing
+   - Dependency updates
+
+3. **Code Quality**
+   - Linting
+   - Style checking
+   - Code smell detection
+
+4. **Container Security**
+   - Image scanning
+   - Base image validation
+   - Runtime security checks
+
+### Continuous Monitoring
+
+- Security scan results in GitHub Security tab
+- Automated notifications for vulnerabilities
+- Regular dependency updates
+- Compliance reporting
+
 ## System Architecture
 
 ### Microservices Overview

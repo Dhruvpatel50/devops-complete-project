@@ -1,4 +1,4 @@
-name: CI / CD Pipeline
+name: CI / CD Pipeline with DevSecOps
 
 on:
   push:
@@ -12,6 +12,7 @@ permissions:
   packages: write
   pull-requests: write
   id-token: write
+  security-events: write
 
 env:
   REGISTRY: ghcr.io
@@ -22,8 +23,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Scanner
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .gitleaks.toml
+          report-format: sarif
+          report-path: gitleaks-report.sarif
+        continue-on-error: true
+
+      - name: Upload Gitleaks Report
+        uses: github/codeql-action/upload-sarif@v2
+        if: success() || failure()
+        with:
+          sarif_file: gitleaks-report.sarif
+          category: gitleaks
+
   build-and-test:
-    name: Build & Test (matrix)
+    name: Build, Test & Security Scan
+    needs: security-scan
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -35,7 +61,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js (if needed)
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -44,17 +70,56 @@ jobs:
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
-            # Use npm ci when lockfile exists (reproducible); otherwise fall back to npm install
             if [ -f package-lock.json ]; then
               echo "package-lock.json found — using npm ci"
-              npm ci --silent --no-audit --no-fund
+              npm ci --silent
             else
               echo "package-lock.json not found — using npm install"
-              npm install --silent --no-audit --no-fund
+              npm install --silent
             fi
           else
             echo "No package.json — skipping install"
           fi
+
+      - name: Run NPM Audit
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          if [ -f package.json ]; then
+            echo "Running npm audit..."
+            npm audit --audit-level=high --json > npm-audit.json || true
+          fi
+
+      - name: Run ESLint
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          if [ -f package.json ]; then
+            echo "Installing ESLint..."
+            npm install --save-dev eslint eslint-plugin-security
+            echo "Running ESLint..."
+            npx eslint . --format=sarif --output-file=eslint.sarif || true
+          fi
+
+      - name: Upload ESLint Report
+        uses: github/codeql-action/upload-sarif@v2
+        if: success() || failure()
+        with:
+          sarif_file: ./services/${{ matrix.service }}/eslint.sarif
+          category: eslint
+
+      - name: Run Snyk
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk.sarif
+        continue-on-error: true
+
+      - name: Upload Snyk Report
+        uses: github/codeql-action/upload-sarif@v2
+        if: success() || failure()
+        with:
+          sarif_file: snyk.sarif
+          category: snyk
 
       - name: Run tests
         working-directory: ./services/${{ matrix.service }}
@@ -64,7 +129,7 @@ jobs:
           fi
 
   build-and-push:
-    name: Build & Push Docker Images
+    name: Build, Scan & Push Docker Images
     needs: build-and-test
     runs-on: ubuntu-latest
     strategy:
@@ -90,7 +155,30 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build image for scanning
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/${{ matrix.service }}
+          load: true
+          tags: ${{ matrix.service }}:${{ github.sha }}
+          file: ./services/${{ matrix.service }}/Dockerfile
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ matrix.service }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: success() || failure()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      - name: Build and push final image
         uses: docker/build-push-action@v4
         with:
           context: ./services/${{ matrix.service }}
