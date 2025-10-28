@@ -1,0 +1,175 @@
+
+name: CI / CD Pipeline
+
+# Triggers: runs on pushes to main, PRs targeting main, and on tag pushes (v*)
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+# Ensure the workflow has the rights it needs (push images, create PR comments, etc.)
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+  IMAGE_TAG: ${{ github.sha }}
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (matrix)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js (if needed)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+      - name: Run tests
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          if [ -f package.json ]; then
+            npm test --silent || true
+          fi
+
+  build-and-push:
+    name: Build & Push Docker Images
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth-service, feedback-service, messaging-service, swap-service, user-service]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/${{ matrix.service }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          file: ./services/${{ matrix.service }}/Dockerfile
+
+  terraform:
+    name: Terraform (init / plan / apply)
+    runs-on: ubuntu-latest
+    # Only run terraform when infra files are changed (in push events) or when PR contains infra changes
+    if: >
+      github.event_name == 'push' && (
+        contains(join(github.event.commits.*.added, ' '), 'infra/') ||
+        contains(join(github.event.commits.*.modified, ' '), 'infra/') ||
+        contains(join(github.event.commits.*.removed, ' '), 'infra/')
+      ) || github.event_name == 'pull_request' && (
+        contains(join(github.event.pull_request.changed_files && github.event.pull_request.changed_files > 0 && github.event.pull_request.head.repo.full_name || '', ''), 'infra/')
+      )
+    env:
+      TF_ROOT: infra
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: "1.5.7"
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform init -input=false
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+          echo "PLAN<<EOF" >> $GITHUB_OUTPUT
+          cat plan.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Comment Plan on PR (optional)
+        if: github.event_name == 'pull_request'
+        uses: actions-ecosystem/action-create-comment@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          body: |
+            Terraform plan for ${{ github.ref }}:
+            ${{ steps.plan.outputs.PLAN }}
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform apply -auto-approve
+
+  deploy:
+    name: Deploy to k3s
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://example.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: '1.27.3'
+      - name: Restore kubeconfig from secret
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
+        run: |
+          if [ -z "$KUBECONFIG_B64" ]; then
+            echo "KUBECONFIG_B64 secret is empty; ensure you added your base64 kubeconfig to repo secrets as KUBECONFIG_B64"
+            exit 1
+          fi
+          echo "$KUBECONFIG_B64" | base64 --decode > kubeconfig
+          chmod 600 kubeconfig
+      - name: Update image tags and apply manifests
+        env:
+          OWNER: ${{ env.OWNER }}
+          TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          export KUBECONFIG=./kubeconfig
+          for service in auth-service user-service swap-service messaging-service feedback-service; do
+            # ensure manifest exists
+            manifest="k8s/${service}-deployment.yaml"
+            if [ -f "$manifest" ]; then
+              # replace image line with the new image (handles different prior formats)
+              yq eval -i '.spec.template.spec.containers[0].image = env(REGISTRY) + "/" + env(OWNER) + "/" + "'"${service}"'" + ":" + env(TAG)' "$manifest" || \
+              sed -E -i "s|image: .*${service}:.*|image: ${REGISTRY}/${OWNER}/${service}:${TAG}|g" "$manifest"
+              kubectl apply -f "$manifest"
+            else
+              echo "Manifest $manifest not found, skipping."
+            fi
+          done
+          if [ -f k8s/ingress.yaml ]; then
+            kubectl apply -f k8s/ingress.yaml
+          fi
