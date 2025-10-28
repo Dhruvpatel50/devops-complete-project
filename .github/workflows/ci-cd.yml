@@ -32,20 +32,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Create results directory
+        run: mkdir -p results
+
       - name: Gitleaks Scanner
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           config-path: .gitleaks.toml
           report-format: sarif
-          report-path: gitleaks-report.sarif
+          report-path: results/gitleaks.sarif
+          verbose: true
         continue-on-error: true
 
       - name: Upload Gitleaks Report
-        uses: github/codeql-action/upload-sarif@v2
-        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
-          sarif_file: gitleaks-report.sarif
+          sarif_file: results/
           category: gitleaks
+          wait-for-processing: true
 
   build-and-test:
     name: Build, Test & Security Scan
@@ -100,11 +107,12 @@ jobs:
           fi
 
       - name: Upload ESLint Report
-        uses: github/codeql-action/upload-sarif@v2
-        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: ./services/${{ matrix.service }}/eslint.sarif
           category: eslint
+          wait-for-processing: true
 
       - name: Run Snyk
         uses: snyk/actions/node@master
@@ -115,11 +123,12 @@ jobs:
         continue-on-error: true
 
       - name: Upload Snyk Report
-        uses: github/codeql-action/upload-sarif@v2
-        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: snyk.sarif
           category: snyk
+          wait-for-processing: true
 
       - name: Run tests
         working-directory: ./services/${{ matrix.service }}
@@ -153,7 +162,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_TOKEN }}
 
       - name: Build image for scanning
         uses: docker/build-push-action@v4
@@ -172,11 +181,12 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
-        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: trivy-results.sarif
           category: trivy
+          wait-for-processing: true
 
       - name: Build and push final image
         uses: docker/build-push-action@v4
