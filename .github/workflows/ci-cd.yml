@@ -15,7 +15,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
+  OWNER: ${{ toLower(github.repository_owner) }}
   IMAGE_TAG: ${{ github.sha }}
 
 concurrency:
