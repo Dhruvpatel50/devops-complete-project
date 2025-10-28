@@ -49,20 +49,20 @@ jobs:
           if [ ! -s results/gitleaks.sarif ]; then
             echo "Creating valid empty SARIF for Gitleaks..."
             cat <<EOF > results/gitleaks.sarif
-{
-  "version": "2.1.0",
-  "runs": [
-    {
-      "tool": {
-        "driver": {
-          "name": "Gitleaks"
-        }
-      },
-      "results": []
-    }
-  ]
-}
-EOF
+            {
+              "version": "2.1.0",
+              "runs": [
+                {
+                  "tool": {
+                    "driver": {
+                      "name": "Gitleaks"
+                    }
+                  },
+                  "results": []
+                }
+              ]
+            }
+            EOF
           fi
 
       - name: Upload Gitleaks Report
