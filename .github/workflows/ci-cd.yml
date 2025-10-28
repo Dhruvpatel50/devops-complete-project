@@ -48,24 +48,22 @@ jobs:
         run: |
           if [ ! -s results/gitleaks.sarif ]; then
             echo "Creating valid empty SARIF for Gitleaks..."
-            cat <<-EOF > results/gitleaks.sarif
-{
-  "version": "2.1.0",
-  "runs": [
-    {
-      "tool": {
-        "driver": {
-          "name": "Gitleaks",
-          "version": "2.0.0",
-          "informationUri": "https://github.com/zricethezav/gitleaks"
-        }
-      },
-      "results": []
-    }
-  ],
-  "\$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
-}
-EOF
+            echo '{
+              "version": "2.1.0",
+              "runs": [
+                {
+                  "tool": {
+                    "driver": {
+                      "name": "Gitleaks",
+                      "version": "2.0.0",
+                      "informationUri": "https://github.com/zricethezav/gitleaks"
+                    }
+                  },
+                  "results": []
+                }
+              ],
+              "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+            }' > results/gitleaks.sarif
           fi
 
       - name: Upload Gitleaks Report
