@@ -1,0 +1,147 @@
+name: Deployment Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI / CD Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # Needed for AWS OIDC authentication
+  deployments: write
+  pull-requests: read
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER_NAME: devops-skillswapper # Your EKS cluster name
+  REGISTRY: ghcr.io
+  DEPLOYMENT_ENVIRONMENT: production
+
+jobs:
+  prepare-deploy:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      deploy_allowed: ${{ steps.check-deploy.outputs.deploy_allowed }}
+      sha: ${{ steps.get-sha.outputs.sha }}
+    
+    steps:
+      - name: Get Workflow Details
+        id: get-sha
+        run: |
+          echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+
+      - name: Check Deploy Requirements
+        id: check-deploy
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
+            echo "deploy_allowed=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_allowed=false" >> $GITHUB_OUTPUT
+          fi
+
+  deploy-to-k8s:
+    name: Deploy to Kubernetes
+    needs: prepare-deploy
+    if: needs.prepare-deploy.outputs.deploy_allowed == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Update Kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+      
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Verify Cluster Access
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Deploy Services
+        env:
+          SHA: ${{ needs.prepare-deploy.outputs.sha }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          # Update deployment configs with new image tags
+          services=(auth-service user-service swap-service messaging-service feedback-service)
+          
+          for service in "${services[@]}"; do
+            echo "Deploying $service..."
+            
+            # Prepare image reference
+            IMAGE="${{ env.REGISTRY }}/${OWNER,,}/$service:${SHA}"
+            
+            # Check if deployment exists
+            if kubectl get deployment $service -n default &>/dev/null; then
+              echo "Updating existing deployment: $service"
+              kubectl set image deployment/$service $service=$IMAGE -n default --record
+              
+              # Wait for rollout with timeout
+              kubectl rollout status deployment/$service -n default --timeout=5m || {
+                echo "Deployment of $service failed - rolling back"
+                kubectl rollout undo deployment/$service -n default
+                exit 1
+              }
+            else
+              echo "Creating new deployment: $service"
+              # Replace image in deployment YAML and apply
+              sed "s|<AWS_ECR_URI>/$service:latest|$IMAGE|g" k8s/$service-deployment.yaml | kubectl apply -f -
+            fi
+          done
+
+      - name: Verify Deployments
+        run: |
+          kubectl get deployments -n default
+          kubectl get pods -n default
+          
+      - name: Check Services Health
+        run: |
+          # Wait for all pods to be ready
+          kubectl wait --for=condition=ready pods --all -n default --timeout=300s
+          
+          # Get service endpoints
+          kubectl get svc -n default
+
+  notify:
+    name: Notify Deployment Status
+    needs: [prepare-deploy, deploy-to-k8s]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Generate Deployment Report
+        run: |
+          echo "## Deployment Status Report" > deploy_report.md
+          echo "- Environment: ${{ env.DEPLOYMENT_ENVIRONMENT }}" >> deploy_report.md
+          echo "- Commit: ${{ needs.prepare-deploy.outputs.sha }}" >> deploy_report.md
+          echo "- Status: ${{ needs.deploy-to-k8s.result }}" >> deploy_report.md
+          echo "- Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> deploy_report.md
+
+      - name: Upload Deployment Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report
+          path: deploy_report.md
+          
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "::error::Deployment to ${{ env.DEPLOYMENT_ENVIRONMENT }} failed! Check the logs for details."
+          # Add your notification logic here (e.g., Slack, email)
