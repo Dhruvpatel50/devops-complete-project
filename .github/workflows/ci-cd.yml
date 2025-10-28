@@ -94,7 +94,7 @@ jobs:
             npm audit --audit-level=high --json > npm-audit.json || true
           fi
 
-            - name: Run ESLint
+      - name: Run ESLint
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
