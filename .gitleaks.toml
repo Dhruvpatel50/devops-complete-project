@@ -1,33 +1,41 @@
+title = "gitleaks config"
+
 [allowlist]
-description = "Allowlist"
+description = "global allow list"
 paths = [
+    '''node_modules''',
     '''package-lock.json$''',
     '''yarn.lock$''',
     '''.svg$'''
 ]
 
 [rules]
-    [rules.npm-auth-token]
-    description = "npm Auth Token"
-    regex = '''//registry.npmjs.org/:_authToken=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'''
-    tags = ["npm", "auth", "token"]
-
-    [rules.aws-access-key]
-    description = "AWS Access Key ID"
-    regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
-    tags = ["aws", "credentials"]
-
-    [rules.aws-secret-key]
-    description = "AWS Secret Access Key"
-    regex = '''(?i)aws(.{0,20})?(?-i)['\"][0-9a-zA-Z\/+]{40}['\"]'''
-    tags = ["aws", "credentials"]
-
     [rules.github-pat]
     description = "GitHub Personal Access Token"
     regex = '''ghp_[0-9a-zA-Z]{36}'''
     tags = ["github", "token"]
-
+    
+    [rules.aws-access-key]
+    description = "AWS Access Key ID"
+    regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+    tags = ["aws", "credentials"]
+    
+    [rules.aws-secret-key]
+    description = "AWS Secret Access Key"
+    regex = '''(?i)aws(.{0,20})?(?-i)['\"][0-9a-zA-Z\/+]{40}['\"]'''
+    tags = ["aws", "credentials"]
+    
     [rules.private-key]
     description = "Private Key"
     regex = '''-----BEGIN ((RSA|DSA|EC|PGP|OPENSSH) )?PRIVATE KEY( BLOCK)?-----'''
     tags = ["key", "private"]
+    
+    [rules.npm-auth-token]
+    description = "NPM Auth Token"
+    regex = '''//registry.npmjs.org/:_authToken=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'''
+    tags = ["npm", "auth", "token"]
+    
+    [rules.slack-token]
+    description = "Slack Token"
+    regex = '''xox[baprs]-([0-9a-zA-Z]{10,48})?'''
+    tags = ["slack", "token"]

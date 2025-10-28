@@ -36,9 +36,10 @@ jobs:
         run: mkdir -p results
 
       - name: Gitleaks Scanner
-        uses: gitleaks/gitleaks-action@v2
+        uses: zricethezav/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
         with:
           config-path: .gitleaks.toml
           report-format: sarif
@@ -46,11 +47,17 @@ jobs:
           verbose: true
         continue-on-error: true
 
+      - name: List results directory
+        if: always()
+        run: |
+          echo "Contents of results directory:"
+          ls -la results/
+
       - name: Upload Gitleaks Report
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: results/
+          sarif_file: results/gitleaks.sarif
           category: gitleaks
           wait-for-processing: true
 
