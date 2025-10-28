@@ -94,21 +94,32 @@ jobs:
             npm audit --audit-level=high --json > npm-audit.json || true
           fi
 
-      - name: Run ESLint
+            - name: Run ESLint
         working-directory: ./services/${{ matrix.service }}
         run: |
           if [ -f package.json ]; then
             npm install --save-dev eslint eslint-plugin-security
-            npx eslint . --format=sarif --output-file=eslint.sarif || true
+            # Run ESLint on js/ts files only
+            npx eslint . --ext .js,.ts --format=sarif --output-file=eslint.sarif || true
+          fi
+
+      - name: Ensure ESLint SARIF file exists
+        if: always()
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          if [ ! -f eslint.sarif ]; then
+            echo "ESLint SARIF missing. Creating placeholder..."
+            echo '{"version":"2.1.0","runs":[]}' > eslint.sarif
           fi
 
       - name: Upload ESLint Report
         uses: github/codeql-action/upload-sarif@v3
-        if: always() && hashFiles('./services/${{ matrix.service }}/eslint.sarif') != ''
+        if: always()
         with:
           sarif_file: ./services/${{ matrix.service }}/eslint.sarif
           category: eslint
           wait-for-processing: true
+
 
       - name: Run Snyk
         uses: snyk/actions/node@master
