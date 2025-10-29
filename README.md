@@ -1,8 +1,30 @@
-# SkillSwapper - Microservice Architecture
+# SkillSwapper - DevOps & Microservices Platform
 
-A modern microservices-based skill exchange platform where users can connect, swap skills, and learn from each other.
+A modern, cloud-native microservices platform for skill exchange, built with comprehensive DevSecOps practices and deployed on AWS EKS.
 
-## DevSecOps Implementation
+![Build Status](https://github.com/Dhruvpatel50/devops-complete-project/actions/workflows/ci-cd.yml/badge.svg)
+[![Security Scan](https://github.com/Dhruvpatel50/devops-complete-project/actions/workflows/ci-cd.yml/badge.svg?event=security)](https://github.com/Dhruvpatel50/devops-complete-project/security)
+
+## Table of Contents
+- [Project Overview](#project-overview)
+- [System Architecture](#system-architecture)
+- [Repository Structure](#repository-structure)
+- [Microservices](#microservices)
+- [Infrastructure Setup](#infrastructure-setup)
+- [DevSecOps Pipeline](#devsecops-pipeline)
+- [Deployment Guide](#deployment-guide)
+- [Security Features](#security-features)
+
+## Project Overview
+
+SkillSwapper is a comprehensive platform that enables users to:
+- Connect with other users to exchange skills
+- Manage skill swap requests
+- Real-time messaging between users
+- Provide feedback and ratings
+- Secure user authentication and profile management
+
+## System Architecture
 
 Our project implements a comprehensive DevSecOps pipeline to ensure security, code quality, and reliability throughout the development lifecycle.
 
@@ -73,10 +95,243 @@ Our project implements a comprehensive DevSecOps pipeline to ensure security, co
 
 ## System Architecture
 
-### Microservices Overview
-![Architecture Diagram](docs/architecture.png)
+Our system architecture follows a modern microservices approach deployed on AWS EKS:
 
-The system consists of five core microservices:
+```mermaid
+graph TD
+    subgraph AWS Cloud
+        subgraph EKS Cluster
+            subgraph Node Pool 1
+                Pod1[Auth & User Services]
+                Pod2[Messaging & Feedback Services]
+            end
+            subgraph Node Pool 2
+                Pod3[Swap Service]
+                Pod4[Monitoring & Logging]
+            end
+        end
+        
+        DB[(Amazon RDS)]
+        Cache[(Redis Cache)]
+        S3[S3 Bucket]
+        CDN[CloudFront]
+    end
+
+    Client[Web Client] --> CDN
+    CDN --> Ingress[Ingress Controller]
+    Ingress --> Pod1
+    Ingress --> Pod2
+    Ingress --> Pod3
+    
+    Pod1 --> DB
+    Pod2 --> DB
+    Pod3 --> DB
+    Pod1 --> Cache
+    Pod2 --> Cache
+    Pod1 --> S3
+
+    Monitor[Prometheus & Grafana] --> Pod4
+```
+
+### Infrastructure Components:
+- **EKS Cluster**: 2 worker nodes running microservices
+- **Load Balancer**: AWS ALB for traffic distribution
+- **Storage**: Amazon RDS for database, S3 for file storage
+- **Caching**: Redis for session and data caching
+- **CDN**: CloudFront for static content delivery
+- **Monitoring**: Prometheus & Grafana stack
+
+## Repository Structure
+
+```
+devops-complete-project/
+├── services/                  # Microservices
+│   ├── auth-service/         # Authentication service
+│   ├── user-service/         # User management
+│   ├── messaging-service/    # Real-time messaging
+│   ├── swap-service/         # Skill swap management
+│   └── feedback-service/     # User feedback & ratings
+├── k8s/                      # Kubernetes manifests
+│   ├── auth-service/
+│   ├── feedback-service/
+│   ├── messaging-service/
+│   ├── swap-service/
+│   └── ingress.yaml
+├── infra/                    # Terraform configurations
+│   ├── main.tf              # Main infrastructure
+│   ├── variables.tf         # Variable definitions
+│   └── outputs.tf           # Output definitions
+├── .github/
+│   └── workflows/           # CI/CD pipelines
+└── scripts/                 # Deployment scripts
+```
+
+## Microservices
+
+### 1. Auth Service
+- User authentication and authorization
+- JWT token management
+- OAuth2 integration
+- **Tech Stack**: Node.js, Express, JWT
+
+### 2. User Service
+- User profile management
+- Skill inventory
+- Account settings
+- **Tech Stack**: Node.js, Express, MongoDB
+
+### 3. Messaging Service
+- Real-time chat functionality
+- Message history
+- User presence detection
+- **Tech Stack**: Node.js, Socket.io, Redis
+
+### 4. Swap Service
+- Skill swap request management
+- Matching algorithm
+- Schedule coordination
+- **Tech Stack**: Node.js, Express, MongoDB
+
+### 5. Feedback Service
+- User ratings and reviews
+- Feedback management
+- Rating analytics
+- **Tech Stack**: Node.js, Express, MongoDB
+
+## Infrastructure Setup
+
+### AWS Resources
+- EKS Cluster with 2 managed node groups
+- VPC with public and private subnets
+- NAT Gateway for private subnet access
+- ALB for load balancing
+- Route53 for DNS management
+
+### Kubernetes Configuration
+Example pod configuration:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: auth-service
+spec:
+  containers:
+  - name: auth
+    image: ghcr.io/dhruvpatel50/auth-service:latest
+    ports:
+    - containerPort: 3000
+    resources:
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+```
+
+## DevSecOps Pipeline
+
+Our CI/CD pipeline implements comprehensive security scanning:
+
+### Security Checks
+1. **Secret Scanning**: Gitleaks
+   - Prevents secret leaks
+   - Custom rules for specific patterns
+   - SARIF reporting
+
+2. **SAST**: ESLint security rules
+   - Code quality checks
+   - Security best practices
+   - Custom security rules
+
+3. **Dependency Scanning**: Snyk
+   - Vulnerability detection
+   - License compliance
+   - Dependency updates
+
+4. **Container Scanning**: Trivy
+   - Base image scanning
+   - Package vulnerability checks
+   - Misconfiguration detection
+
+5. **Infrastructure Scanning**: Terraform security checks
+   - IaC best practices
+   - Security group validation
+   - Access control verification
+
+### CI/CD Flow
+1. Code Push/PR → Security Scans
+2. Build → Test → Security Scans
+3. Container Build → Container Scan
+4. Push to Registry
+5. Deploy to EKS
+
+### Security Reports
+- All scan results available in GitHub Security tab
+- Automated vulnerability reporting
+- Compliance documentation
+- Security metrics tracking
+
+## Deployment Guide
+
+1. **Prerequisites**
+   ```bash
+   aws configure
+   kubectl configure
+   terraform init
+   ```
+
+2. **Infrastructure Deployment**
+   ```bash
+   cd infra
+   terraform plan
+   terraform apply
+   ```
+
+3. **Application Deployment**
+   ```bash
+   kubectl apply -f k8s/
+   ```
+
+## Security Features
+
+1. **Infrastructure Security**
+   - Private subnets for workloads
+   - Security groups and NACLs
+   - IAM roles and policies
+   - AWS KMS encryption
+
+2. **Application Security**
+   - JWT authentication
+   - Rate limiting
+   - Input validation
+   - HTTPS enforcement
+
+3. **Container Security**
+   - Image scanning
+   - Runtime security
+   - Resource limits
+   - Network policies
+
+## Monitoring and Logging
+
+1. **Metrics Collection**
+   - Prometheus for metrics
+   - Grafana for visualization
+   - Custom dashboards
+
+2. **Log Management**
+   - Centralized logging
+   - Log retention policies
+   - Search and analytics
+
+## Contributing
+
+Please read our [Contributing Guide](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 1. **Auth Service** (Port: 3001)
    - Handles user authentication and authorization
