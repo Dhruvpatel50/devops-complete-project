@@ -135,23 +135,6 @@ Our system architecture follows a microservices approach deployed on AWS EKS wit
 └──────┼──────────┼──────────────┼──────────┼────────────┼─────────────┘
        │          │              │          │            │
        ▼          ▼              ▼          ▼            ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      🐳 KUBERNETES PODS LAYER                           │
-│                                                                         │
-│  ┌────────┐  ┌────────┐  ┌─────────┐  ┌────────┐  ┌────────────┐      │
-│  │ Auth   │  │ User   │  │Messaging│  │ Swap   │  │ Feedback   │      │
-│  │ Pod    │  │ Pod    │  │  Pod    │  │ Pod    │  │   Pod      │      │
-│  │        │  │        │  │         │  │        │  │            │      │
-│  │┌─────┐ │  │┌─────┐ │  │┌─────┐  │  │┌─────┐ │  │┌─────┐    │      │
-│  ││Node.js││  ││Node.js││  ││Node.js││  ││Node.js││  ││Node.js│   │      │
-│  ││Express││  ││Express││  ││Express││  ││Express││  ││Express│   │      │
-│  │└──┬──┘ │  │└──┬──┘ │  │└──┬──┘  │  │└──┬──┘ │  │└──┬──┘    │      │
-│  │   │    │  │   │    │  │   │     │  │   │    │  │   │       │      │
-│  │Resources│  │Resources│  │Resources│  │Resources│  │Resources  │      │
-│  │CPU:200m│  │CPU:200m│  │CPU:200m │  │CPU:200m│  │CPU:200m   │      │
-│  │MEM:256Mi│  │MEM:256Mi│  │MEM:256Mi│  │MEM:256Mi│  │MEM:256Mi  │      │
-│  └────────┘  └────────┘  └─────────┘  └────────┘  └────────────┘      │
-└──────────────────────────────┼──────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -177,88 +160,6 @@ Our system architecture follows a microservices approach deployed on AWS EKS wit
 │  │  • API_ENDPOINTS    │        │  • JWT_SECRET                   │  │
 │  └──────────────────────┘        └──────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
-```
-
-```mermaid
-graph TD
-    subgraph AWS Cloud
-        subgraph EKS Cluster
-            subgraph Control Plane
-                API[kube-apiserver]
-                CM[kube-controller-manager]
-                SCHED[kube-scheduler]
-                ETCD[(etcd)]
-            end
-
-            subgraph Worker Node 1
-                subgraph Pods 1
-                    Auth[Auth Service Pod]
-                    User[User Service Pod]
-                    Messaging[Messaging Service Pod]
-                end
-                kubelet1[kubelet]
-                proxy1[kube-proxy]
-            end
-
-            subgraph Worker Node 2
-                subgraph Pods 2
-                    Swap[Swap Service Pod]
-                    Feedback[Feedback Service Pod]
-                end
-                kubelet2[kubelet]
-                proxy2[kube-proxy]
-            end
-
-            subgraph K8s Services
-                AuthSvc[Auth Service]
-                UserSvc[User Service]
-                MsgSvc[Messaging Service]
-                SwapSvc[Swap Service]
-                FeedbackSvc[Feedback Service]
-            end
-
-            subgraph K8s Networking
-                Ingress[NGINX Ingress Controller]
-                CoreDNS[CoreDNS]
-            end
-        end
-        
-        ALB[AWS ALB]
-        S3[(AWS S3)]
-        GHCR[GitHub Container Registry]
-    end
-
-    Client[Web Client] --> ALB
-    ALB --> Ingress
-    
-    Ingress --> AuthSvc
-    Ingress --> UserSvc
-    Ingress --> MsgSvc
-    Ingress --> SwapSvc
-    Ingress --> FeedbackSvc
-    
-    AuthSvc --> Auth
-    UserSvc --> User
-    MsgSvc --> Messaging
-    SwapSvc --> Swap
-    FeedbackSvc --> Feedback
-    
-    Auth --> S3
-    User --> S3
-    Messaging --> S3
-    Swap --> S3
-    Feedback --> S3
-
-    kubelet1 --> API
-    kubelet2 --> API
-    API --> ETCD
-    API --> CM
-    API --> SCHED
-    
-    CoreDNS --> API
-
-    GHCR --> kubelet1
-    GHCR --> kubelet2
 ```
 
 ### Infrastructure Components:
