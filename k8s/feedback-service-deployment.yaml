@@ -12,9 +12,14 @@ spec:
       labels:
         app: feedback-service
     spec:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+        effect: "NoSchedule"
       containers:
       - name: feedback-service
-        image: <AWS_ECR_URI>/feedback-service:latest
+        image: ghcr.io/dhruvpatel50/feedback-service:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3005
         env:

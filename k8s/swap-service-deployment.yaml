@@ -12,9 +12,14 @@ spec:
       labels:
         app: swap-service
     spec:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+        effect: "NoSchedule"
       containers:
       - name: swap-service
-        image: <AWS_ECR_URI>/swap-service:latest
+        image: ghcr.io/dhruvpatel50/swap-service:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3003
         env:

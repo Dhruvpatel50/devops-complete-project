@@ -12,9 +12,14 @@ spec:
       labels:
         app: user-service
     spec:
+      tolerations:
+      - key: "CriticalAddonsOnly"
+        operator: "Exists"
+        effect: "NoSchedule"
       containers:
       - name: user-service
-        image: <AWS_ECR_URI>/user-service:latest
+        image: ghcr.io/dhruvpatel50/user-service:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 3002
         env:

@@ -6,9 +6,10 @@ require('dotenv').config();
 
 const app = express();
 const server = require('http').createServer(app);
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const io = require('socket.io')(server, {
   cors: {
-    origin: "http://localhost:3000", // Your frontend URL
+    origin: FRONTEND_URL,
     methods: ["GET", "POST"],
     credentials: true
   },
@@ -16,7 +17,7 @@ const io = require('socket.io')(server, {
   pingInterval: 25000,
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Multer setup
 const upload = multer({ storage: multer.memoryStorage() });
@@ -24,12 +25,10 @@ app.set('upload', upload);
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/skill_swaper';
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('📦 MongoDB Connected'))
-.catch(err => console.error('MongoDB connection error:', err));
+// Mongoose v4+ uses sensible defaults; remove deprecated options
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('📦 MongoDB Connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Middleware
 app.use(cors());
@@ -169,6 +168,17 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Internal Server Error' });
 });
 
+
+// Handle common server errors (like EADDRINUSE) gracefully
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`✖ Port ${PORT} is already in use. Either stop the process using the port or set a different PORT environment variable.`);
+    console.error(`  On macOS you can run: lsof -nP -iTCP:${PORT} -sTCP:LISTEN`);
+    process.exit(1);
+  }
+  console.error('Server error:', err);
+  process.exit(1);
+});
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
