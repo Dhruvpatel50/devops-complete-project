@@ -95,51 +95,120 @@ Our project implements a comprehensive DevSecOps pipeline to ensure security, co
 
 ## System Architecture
 
-Our system architecture follows a modern microservices approach deployed on AWS EKS:
+Our system architecture follows a microservices approach deployed on AWS EKS with Kubernetes orchestration:
 
 ```mermaid
 graph TD
     subgraph AWS Cloud
         subgraph EKS Cluster
-            subgraph Node Pool 1
-                Pod1[Auth & User Services]
-                Pod2[Messaging & Feedback Services]
+            subgraph Control Plane
+                API[kube-apiserver]
+                CM[kube-controller-manager]
+                SCHED[kube-scheduler]
+                ETCD[(etcd)]
             end
-            subgraph Node Pool 2
-                Pod3[Swap Service]
-                Pod4[Monitoring & Logging]
+
+            subgraph Worker Node 1
+                subgraph Pods 1
+                    Auth[Auth Service Pod]
+                    User[User Service Pod]
+                    Messaging[Messaging Service Pod]
+                end
+                kubelet1[kubelet]
+                proxy1[kube-proxy]
+            end
+
+            subgraph Worker Node 2
+                subgraph Pods 2
+                    Swap[Swap Service Pod]
+                    Feedback[Feedback Service Pod]
+                end
+                kubelet2[kubelet]
+                proxy2[kube-proxy]
+            end
+
+            subgraph K8s Services
+                AuthSvc[Auth Service]
+                UserSvc[User Service]
+                MsgSvc[Messaging Service]
+                SwapSvc[Swap Service]
+                FeedbackSvc[Feedback Service]
+            end
+
+            subgraph K8s Networking
+                Ingress[NGINX Ingress Controller]
+                CoreDNS[CoreDNS]
             end
         end
         
-        DB[(Amazon RDS)]
-        Cache[(Redis Cache)]
-        S3[S3 Bucket]
-        CDN[CloudFront]
+        ALB[AWS ALB]
+        S3[(AWS S3)]
+        GHCR[GitHub Container Registry]
     end
 
-    Client[Web Client] --> CDN
-    CDN --> Ingress[Ingress Controller]
-    Ingress --> Pod1
-    Ingress --> Pod2
-    Ingress --> Pod3
+    Client[Web Client] --> ALB
+    ALB --> Ingress
     
-    Pod1 --> DB
-    Pod2 --> DB
-    Pod3 --> DB
-    Pod1 --> Cache
-    Pod2 --> Cache
-    Pod1 --> S3
+    Ingress --> AuthSvc
+    Ingress --> UserSvc
+    Ingress --> MsgSvc
+    Ingress --> SwapSvc
+    Ingress --> FeedbackSvc
+    
+    AuthSvc --> Auth
+    UserSvc --> User
+    MsgSvc --> Messaging
+    SwapSvc --> Swap
+    FeedbackSvc --> Feedback
+    
+    Auth --> S3
+    User --> S3
+    Messaging --> S3
+    Swap --> S3
+    Feedback --> S3
 
-    Monitor[Prometheus & Grafana] --> Pod4
+    kubelet1 --> API
+    kubelet2 --> API
+    API --> ETCD
+    API --> CM
+    API --> SCHED
+    
+    CoreDNS --> API
+
+    GHCR --> kubelet1
+    GHCR --> kubelet2
 ```
 
 ### Infrastructure Components:
-- **EKS Cluster**: 2 worker nodes running microservices
-- **Load Balancer**: AWS ALB for traffic distribution
-- **Storage**: Amazon RDS for database, S3 for file storage
-- **Caching**: Redis for session and data caching
-- **CDN**: CloudFront for static content delivery
-- **Monitoring**: Prometheus & Grafana stack
+
+#### Kubernetes Control Plane
+- **kube-apiserver**: API server that exposes the Kubernetes API
+- **etcd**: Consistent and highly-available key value store for all cluster data
+- **kube-scheduler**: Watches for newly created Pods and selects nodes for them
+- **kube-controller-manager**: Runs controller processes
+
+#### Worker Nodes
+Each worker node contains:
+- **kubelet**: Agent that ensures containers are running in a Pod
+- **kube-proxy**: Network proxy that maintains network rules
+- **Container Runtime**: Docker/containerd for running containers
+
+#### Kubernetes Resources
+- **Pods**: Smallest deployable units, hosting our microservices
+- **Services**: Load balancing and service discovery for Pods
+- **Ingress**: NGINX Ingress Controller for routing external traffic
+- **CoreDNS**: For cluster DNS services
+
+#### AWS Infrastructure
+- **EKS Control Plane**: Managed by AWS
+- **ALB**: AWS Application Load Balancer
+- **S3**: Object storage for file persistence
+- **Security Groups**: Network security
+- **IAM Roles**: For EKS and worker nodes
+
+#### Container Registry
+- **GitHub Container Registry (ghcr.io)**: Stores our container images
+- Automatic image pulling with GitHub Actions integration
 
 ## Repository Structure
 
@@ -313,17 +382,11 @@ Our CI/CD pipeline implements comprehensive security scanning:
    - Resource limits
    - Network policies
 
-## Monitoring and Logging
+## Logging
 
-1. **Metrics Collection**
-   - Prometheus for metrics
-   - Grafana for visualization
-   - Custom dashboards
-
-2. **Log Management**
-   - Centralized logging
-   - Log retention policies
-   - Search and analytics
+Application logs are handled through:
+- Container stdout/stderr logs
+- AWS CloudWatch Logs (via EKS)
 
 ## Contributing
 
