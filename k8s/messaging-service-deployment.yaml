@@ -12,8 +12,6 @@ spec:
       labels:
         app: messaging-service
     spec:
-      imagePullSecrets:
-      - name: ghcr-secret
       tolerations:
       - key: "CriticalAddonsOnly"
         operator: "Exists"
